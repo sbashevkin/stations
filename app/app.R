@@ -138,9 +138,6 @@ server <- function(input, output, session) {
    #     
    # })
     
-    tooltip<-reactive({
-        
-    })
     
     mapplot<-reactive({
         req(input$nav=="map")
