@@ -319,7 +319,7 @@ ggplot()+
   
 Stations_final<-Stations%>%
   group_by(StationID)%>%
-  mutate(Latitude=mean(Latitude), Longitude=mean(Longitude))%>%
+  mutate(Latitude=mean(Latitude), Longitude=mean(Longitude), N_years=length(unique(Year)))%>%
   ungroup()%>%
   pivot_wider(names_from = Parameter, values_from=N)%>%
   mutate(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish), ~replace_na(.x, 0)),
