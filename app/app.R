@@ -7,6 +7,8 @@ require(shinyWidgets)
 require(rlang)
 require(stringr)
 require(RColorBrewer)
+require(readxl)
+require(DT)
 
 Sampling<-readRDS("Sampling.Rds")
 Survey_names<-tibble(Survey=c('20-mm Survey (20mm)', 'CDFW Bay Study (Baystudy)', 'Delta Juvenile Fish Monitoring Program (DJFMP)', 'Enhanced Delta Smelt Monitoring (EDSM)', 
@@ -24,13 +26,30 @@ Surveys<-set_names(Survey_names$Abbreviation, Survey_names$Survey)
 
 Surveys2 <- str_replace_all(str_wrap(names(Surveys), width = 32), "\\n", "<br>")
 
+Survey_info<-read_excel("Survey_info.xlsx")%>%
+  left_join(Sampling%>%
+              group_by(Source)%>%
+              summarise(across(all_of(unname(Parameters)), ~if_else(sum(.x)>0, "Yes", "")),
+                        N_total=sum(N_total), .groups="drop"),
+            by=c("Abbreviation"="Source"))%>%
+  mutate(across(c(`Link 1`, `Link 2`), ~if_else(is.na(.x), "", paste0("<a href='",.x,"'>",.x,"</a>"))))%>%
+  rename(`Water quality`=Water_quality, `Total sample size`=N_total)%>%
+  relocate(`Link 1`, `Link 2`, .after = last_col())
+
 # Define UI for application that draws a histogram
 ui <- navbarPage("IEP stations map", id="nav",
                  tabPanel("Info", 
-                          tags$div(tags$h2("Information"), tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs."), 
-                                   tags$p("Sampling effort is based off the latest available data, so some surveys may be missing in recent years for which data have not been released. All surveys should be available for 2018 and earlier."),
-                                   tags$p("Sampling locations are approximate."),
-                                                   tags$p(tags$b("Please contact Sam Bashevkin ", tags$a('(sam.bashevkin@deltacouncil.ca.gov)', href="mailto:sam.bashevkin@deltacouncil.ca.gov?subject=Monitoring%20Shiny%20App"), " at the Delta Science Program with any questions.")))
+                          tags$div(tags$h2("Information"), 
+                                   tags$p(tags$b("Please contact Sam Bashevkin ", 
+                                                 tags$a('(sam.bashevkin@deltacouncil.ca.gov)', 
+                                                        href="mailto:sam.bashevkin@deltacouncil.ca.gov?subject=Monitoring%20Shiny%20App"), 
+                                                 " at the Delta Science Program with any questions.")),
+                                   tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs."), 
+                                   tags$p("Sampling effort is based off the latest available data, so some surveys may be missing in recent years for which data have not been released, or for collected data not included in data releases. 
+                                          All surveys should be available for 2018 and earlier. 
+                                          Sampling locations are approximate and may represent the mean location when multiple locations were available for a station.")),
+                          tags$h3("Survey details"),
+                          dataTableOutput("Survey_info")
                  ),
                  
                  tabPanel("Interactive map", value="map",
@@ -52,7 +71,8 @@ ui <- navbarPage("IEP stations map", id="nav",
                                         prettySwitch("Years", "Inspect sampling effort for each year?", status = "success", fill = TRUE, bigger=TRUE),
                                         conditionalPanel(condition="input.Years",
                                                          sliderInput("Year", "Select year",
-                                                                     min=min(Sampling$Year), max=max(Sampling$Year), value=2018, step=1, sep="")),
+                                                                     min=min(Sampling$Year), max=max(Sampling$Year), value=2018, step=1, sep="",
+                                                                     animate=TRUE)),
                                         radioGroupButtons(
                                           inputId = "Legend",
                                           label = "Variable for color scale", 
@@ -77,6 +97,11 @@ td:first-child {
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  
+  output$Survey_info<-renderDataTable({
+    datatable(Survey_info, rownames=F, escape = FALSE, options=list(paging=FALSE))%>%
+      formatRound(c('Total sample size'), digits=0, interval = 3, mark = ',')
+  })
   
   observeEvent(input$Parameters, {
     req(input$nav=="map")
@@ -130,7 +155,7 @@ server <- function(input, output, session) {
     
     
     radioGroupButtons("Parameter_legend", "Which parameter should be used for the sampling effort legend?", choices=Parameters2, 
-                selected = if_else(is.null(input$Parameter_legend), "N_total", input$Parameter_legend), status = "primary")
+                      selected = if_else(is.null(input$Parameter_legend), "N_total", input$Parameter_legend), status = "primary")
   })
   
   Data<-reactive({
@@ -197,27 +222,27 @@ server <- function(input, output, session) {
     }
   })
   
-    pal_survey<-reactive({
-      req(input$nav=="map", Data())
-      
-      Sources<-unique(Data()$Source)
-      
-      if(length(Sources)>12){
-        colorFactor(colorRampPalette(brewer.pal(12, "Set3"))(length(Sources)), Sources)
-      }else{
-        colorFactor(brewer.pal(length(Sources), "Set3"), Sources)
-      }
-         
-   })
+  pal_survey<-reactive({
+    req(input$nav=="map", Data())
+    
+    Sources<-unique(Data()$Source)
+    
+    if(length(Sources)>12){
+      colorFactor(colorRampPalette(brewer.pal(12, "Set3"))(length(Sources)), Sources)
+    }else{
+      colorFactor(brewer.pal(length(Sources), "Set3"), Sources)
+    }
+    
+  })
   
-   pal_effort<-reactive({
-       req(input$nav=="map", input$Parameter_legend)
-     if(input$Log){
-       colorNumeric("viridis", log(Data()[[input$Parameter_legend]]+1))
-     }else{
-       colorNumeric("viridis", Data()[[input$Parameter_legend]])
-     }
-    })
+  pal_effort<-reactive({
+    req(input$nav=="map", input$Parameter_legend)
+    if(input$Log){
+      colorNumeric("viridis", log(Data()[[input$Parameter_legend]]+1))
+    }else{
+      colorNumeric("viridis", Data()[[input$Parameter_legend]])
+    }
+  })
   
   
   mapplot<-reactive({
@@ -242,20 +267,20 @@ server <- function(input, output, session) {
         {if(input$Log){
           addCircleMarkers(., weight = 1, lng = ~Longitude, lat = ~Latitude, 
                            fillColor = ~pal_effort()(log(data[[input$Parameter_legend]]+1)), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
-          addLegend(., "topleft", pal = pal_effort(), values = ~log(data[[input$Parameter_legend]]+1), opacity=1, labFormat=labelFormat(transform=function(x) round(exp(x)-1)),
-                    title=str_replace(input$Parameter_legend, "_", " "))
-          }else{
-            addCircleMarkers(., weight = 1, lng = ~Longitude, lat = ~Latitude, 
-                             fillColor = ~pal_effort()(data[[input$Parameter_legend]]), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
+            addLegend(., "topleft", pal = pal_effort(), values = ~log(data[[input$Parameter_legend]]+1), opacity=1, labFormat=labelFormat(transform=function(x) round(exp(x)-1)),
+                      title=str_replace(input$Parameter_legend, "_", " "))
+        }else{
+          addCircleMarkers(., weight = 1, lng = ~Longitude, lat = ~Latitude, 
+                           fillColor = ~pal_effort()(data[[input$Parameter_legend]]), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
             addLegend(., "topleft", pal = pal_effort(), values = ~data[[input$Parameter_legend]], opacity=1, title=str_replace(input$Parameter_legend, "_", " "))
-          }}
-          
+        }}
+        
       }else{
         addCircleMarkers(., weight = 1, lng = ~Longitude, lat = ~Latitude,
                          fillColor = ~pal_survey()(data$Source), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
           addLegend(., "topleft", pal = pal_survey(), values = ~data$Source, opacity=1, title="Survey")
       }}
-      
+    
   })
   
   output$mapplot <- renderLeaflet({
