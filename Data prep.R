@@ -322,11 +322,11 @@ Stations_final<-Stations%>%
   mutate(Latitude=mean(Latitude), Longitude=mean(Longitude), N_years=length(unique(Year)))%>%
   ungroup()%>%
   pivot_wider(names_from = Parameter, values_from=N)%>%
-  mutate(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish), ~replace_na(.x, 0)),
-         N_total=Benthic + Phytoplankton + Zooplankton + Water_quality + Fish)%>%
+  mutate(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish), ~replace_na(.x, 0)))%>%
   left_join(BenZoop_stations, by="Station")%>%
   rowwise()%>%
-  mutate(Extra_stations=case_when(
+  mutate(Max=max(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish),
+         Extra_stations=case_when(
     is.null(unlist(Benthic_station)) & is.na(Zoop_station) ~ NA_character_,
     !is.null(unlist(Benthic_station)) & is.na(Zoop_station) ~ paste0("Benthic: ", paste0(unlist(Benthic_station), collapse=", ")),
     is.null(unlist(Benthic_station)) & !is.na(Zoop_station) ~ paste0("Zooplankton: ", Zoop_station),

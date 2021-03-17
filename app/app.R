@@ -30,24 +30,25 @@ Survey_info<-read_excel("Survey_info.xlsx")%>%
   left_join(Sampling%>%
               group_by(Source)%>%
               summarise(across(all_of(unname(Parameters)), ~if_else(sum(.x)>0, "Yes", "")),
-                        N_total=sum(N_total), .groups="drop"),
+                        `Total years of sampling`=max(N_years),
+                        `Average number of samples per year per station`=mean(Max), .groups="drop"),
             by=c("Abbreviation"="Source"))%>%
   mutate(across(c(`Data source 1`, `Data source 2`), ~if_else(is.na(.x), "", paste0("<a href='",.x,"'>",Data_source_name,"</a>"))))%>%
   mutate(Survey=if_else(is.na(Survey_link), Survey, paste0("<a href='",Survey_link,"'>",Survey,"</a>")))%>%
   select(-Survey_link, -Data_source_name)%>%
-  rename(`Water quality`=Water_quality, `Total sample size`=N_total)%>%
+  rename(`Water quality`=Water_quality)%>%
   relocate(`Data source 1`, `Data source 2`, .after = last_col())
 
 # Define UI for application that draws a histogram
-ui <- navbarPage("IEP stations map", id="nav",
+ui <- navbarPage("Bay-Delta monitoring", id="nav",
                  tabPanel("Info", 
                           a(shiny::icon("reply"), "Delta Science shinyapps homepage", href="https://deltascience.shinyapps.io/Home/"),
                           tags$div(tags$h2("Information"), 
+                                   tags$p(tags$em("Click on the 'Interactive map' tab at the top to view the map of sampling locations.")),
                                    tags$p(tags$b("Please contact Sam Bashevkin ", 
                                                  tags$a('(sam.bashevkin@deltacouncil.ca.gov)', 
                                                         href="mailto:sam.bashevkin@deltacouncil.ca.gov?subject=Monitoring%20Shiny%20App"), 
                                                  " at the Delta Science Program with any questions.")),
-                                   tags$p(tags$em("Click on the 'Interactive map' tab at the top to view the map of sampling locations.")),
                                    tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs."), 
                                    tags$p("Sampling effort is based off the latest available data, so some surveys may be missing in recent years for which data have not been released, or for collected data not included in data releases. 
                                           All surveys should be available for 2018 and earlier. 
@@ -104,7 +105,7 @@ server <- function(input, output, session) {
   
   output$Survey_info<-renderDataTable({
     datatable(Survey_info, rownames=F, escape = FALSE, options=list(paging=FALSE))%>%
-      formatRound(c('Total sample size'), digits=0, interval = 3, mark = ',')
+      formatRound(c('Average number of samples per year per station'), digits=0, interval = 3, mark = ',')
   })
   
   observeEvent(input$Parameters, {
@@ -152,14 +153,14 @@ server <- function(input, output, session) {
         sort()
     }
     
-    Parameters2<-c(Parameters, "N_total", "N_years")
+    Parameters2<-c(Parameters, "Max", "N_years")
     
-    names(Parameters2)<-c(str_replace(Parameters, "_", " "), "Total", "N_years")
+    names(Parameters2)<-c(str_replace(Parameters, "_", " "), "Max N over all parameters", "Number of years")
     
     
     
     radioGroupButtons("Parameter_legend", "Which parameter should be used for the sampling effort legend?", choices=Parameters2, 
-                      selected = if_else(is.null(input$Parameter_legend), "N_total", input$Parameter_legend), status = "primary")
+                      selected = if_else(is.null(input$Parameter_legend), "Max", input$Parameter_legend), status = "primary")
   })
   
   Data<-reactive({
@@ -179,7 +180,8 @@ server <- function(input, output, session) {
     }else{
       out<-out%>%
         group_by(Station, Station2, Extra_stations, Source, Latitude, Longitude, Zoop_station, Benthic_station)%>%
-        summarise(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish, N_total), ~sum(.x)), N_years=unique(N_years), .groups="drop")
+        summarise(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish, Max), ~sum(.x)), N_years=unique(N_years), .groups="drop")%>%
+        mutate(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish, Max), ~round(.x/N_years)))
     }
     
     return(out)
@@ -198,7 +200,7 @@ server <- function(input, output, session) {
                           "<tr><td>N_Phytoplankton &nbsp</td><td>%s</td></tr>", 
                           "<tr><td>N_Water_quality &nbsp</td><td>%s</td></tr>", 
                           "<tr><td>N_Zooplankton &nbsp</td><td>%s</td></tr>", 
-                          "<tr><td>N_Total &nbsp</td><td>%s</td></tr>", 
+                          "<tr><td>N_Max &nbsp</td><td>%s</td></tr>", 
                           "<tr><td>N_Years &nbsp</td><td>%s</td></tr>")
     }else{
       str_model <- paste0("<tr><td>Survey &nbsp</td><td>%s</td></tr>", 
@@ -209,7 +211,7 @@ server <- function(input, output, session) {
                           "<tr><td>N_Phytoplankton &nbsp</td><td>%s</td></tr>", 
                           "<tr><td>N_Water_quality &nbsp</td><td>%s</td></tr>", 
                           "<tr><td>N_Zooplankton &nbsp</td><td>%s</td></tr>", 
-                          "<tr><td>N_Total &nbsp</td><td>%s</td></tr>", 
+                          "<tr><td>N_Max &nbsp</td><td>%s</td></tr>", 
                           "<tr><td>N_Years &nbsp</td><td>%s</td></tr>")
     }
     
@@ -217,11 +219,11 @@ server <- function(input, output, session) {
       req(input$nav=="map", input$Year)
       Data()%>%
         filter(Year==input$Year)%>%
-        mutate(tooltip=sprintf(str_model, Year, Source, Station, if_else(is.na(Extra_stations), "None", Extra_stations), Benthic, Fish, Phytoplankton, Water_quality, Zooplankton, N_total, N_years),
+        mutate(tooltip=sprintf(str_model, Year, Source, Station, if_else(is.na(Extra_stations), "None", Extra_stations), Benthic, Fish, Phytoplankton, Water_quality, Zooplankton, Max, N_years),
                tooltip=paste0( "<table  border='1'>", tooltip, "</table>" ))
     }else{
       Data()%>%
-        mutate(tooltip=sprintf(str_model, Source, Station, if_else(is.na(Extra_stations), "None", Extra_stations), Benthic, Fish, Phytoplankton, Water_quality, Zooplankton, N_total, N_years),
+        mutate(tooltip=sprintf(str_model, Source, Station, if_else(is.na(Extra_stations), "None", Extra_stations), Benthic, Fish, Phytoplankton, Water_quality, Zooplankton, Max, N_years),
                tooltip=paste0( "<table  border='1'>", tooltip, "</table>" ))
     }
   })
@@ -282,11 +284,11 @@ server <- function(input, output, session) {
                            fillColor = ~pal_effort()(log(data[[input$Parameter_legend]]+1)), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
             addLegend(., "topleft", pal = pal_effort_rev(), values = ~log(data[[input$Parameter_legend]]+1), opacity=1, 
                       labFormat=labelFormat(transform=function(x) sort(round(exp(x)-1), decreasing = TRUE)),
-                      title=str_replace(input$Parameter_legend, "_", " "))
+                      title=paste0(str_replace(input$Parameter_legend, "_", " "), "\nsamples per year"))
         }else{
           addCircleMarkers(., weight = 1, lng = ~Longitude, lat = ~Latitude, 
                            fillColor = ~pal_effort()(data[[input$Parameter_legend]]), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
-            addLegend(., "topleft", pal = pal_effort_rev(), values = ~data[[input$Parameter_legend]], opacity=1, title=str_replace(input$Parameter_legend, "_", " "), 
+            addLegend(., "topleft", pal = pal_effort_rev(), values = ~data[[input$Parameter_legend]], opacity=1, title=paste0(str_replace(input$Parameter_legend, "_", " "), "\nsamples per year"), 
                       labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE)))
         }}
         
