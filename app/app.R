@@ -12,13 +12,13 @@ require(DT)
 
 Sampling<-readRDS("Sampling.Rds")
 Survey_names<-tibble(Survey=c('20-mm Survey (20mm)', 'CDFW Bay Study (Baystudy)', 'Delta Juvenile Fish Monitoring Program (DJFMP)', 'Enhanced Delta Smelt Monitoring (EDSM)', 
-                              'Environmental Monitoring Program (EMP)', 'Fall Midwater Trawl (FMWT)', 'Fish Restoration Program (FRP)', 'Spring Kodiak Trawl (SKT)', 
-                              'Summer Townet (STN)', 'Suisun Marsh Fish Study (Suisun)', 'Bureau of Reclamation Sacramento Ship Channel Surveys (USBR)', 
-                              'USGS San Francisco Bay Survey(USGS)', 'Yolo Bypass Fish Monitoring Program (YBFMP)'),
+                              'Environmental Monitoring Program (EMP)', 'Fall Midwater Trawl (FMWT)', 'Fish Restoration Program (FRP)', 'Spring Kodiak Trawl (SKT)', 'Smelt Larva Survey',
+                              'Summer Townet (STN)', 'Suisun Marsh Fish Study (Suisun)', 'Bureau of Reclamation Sacramento Ship Channel Surveys (SDSCS)', 
+                              'SFBS San Francisco Bay Survey (SFBS)', 'Yolo Bypass Fish Monitoring Program (YBFMP)'),
                      Abbreviation=c('20mm', 'Baystudy', 'DJFMP', 'EDSM', 
-                                    'EMP', 'FMWT', 'FRP', 'SKT', 
-                                    'STN', 'Suisun', 'USBR', 
-                                    'USGS', 'YBFMP'))
+                                    'EMP', 'FMWT', 'FRP', 'SKT', 'SLS',
+                                    'STN', 'Suisun', 'SDSCS', 
+                                    'SFBS', 'YBFMP'))
 
 Parameters<-c("Benthic", "Phytoplankton", "Zooplankton", "Water_quality", "Fish")
 names(Parameters)<-str_replace(Parameters, "_", " ")
@@ -181,7 +181,7 @@ server <- function(input, output, session) {
       out<-out%>%
         group_by(Station, Station2, Extra_stations, Source, Latitude, Longitude, Zoop_station, Benthic_station)%>%
         summarise(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish, Max), ~sum(.x)), N_years=unique(N_years), .groups="drop")%>%
-        mutate(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish, Max), ~round(.x/N_years)))
+        mutate(across(c(Benthic, Phytoplankton, Zooplankton, Water_quality, Fish, Max), ~round(.x/N_years, 2)))
     }
     
     return(out)

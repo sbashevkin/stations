@@ -37,16 +37,16 @@ YBFMP_zoop<-read_csv(file.path(tempdir(), "YBFMP_zoop.csv"),
 
 # FRP ---------------------------------------------------------------------
 
-FRP_stations<-st_read("FRPstations")
+#FRP_stations<-st_read("FRPstations")
 
-download.file("https://portal.edirepository.org/nis/dataviewer?packageid=edi.269.2&entityid=41d077ac60682ce93c57c1ae1957fdcb", file.path(tempdir(), "FRP_Fish.csv"), mode="wb")
-download.file("https://portal.edirepository.org/nis/dataviewer?packageid=edi.269.2&entityid=630f16b33a9cbf75f1989fc18690a6b3", file.path(tempdir(), "FRP_bugs.csv"), mode="wb")
-download.file("https://portal.edirepository.org/nis/dataviewer?packageid=edi.269.2&entityid=d4c76f209a0653aa86bab1ff93ab9853", file.path(tempdir(), "FRP_zoops.csv"), mode="wb")
+#download.file("https://portal.edirepository.org/nis/dataviewer?packageid=edi.269.2&entityid=41d077ac60682ce93c57c1ae1957fdcb", file.path(tempdir(), "FRP_Fish.csv"), mode="wb")
+#("https://portal.edirepository.org/nis/dataviewer?packageid=edi.269.2&entityid=630f16b33a9cbf75f1989fc18690a6b3", file.path(tempdir(), "FRP_bugs.csv"), mode="wb")
+#download.file("https://portal.edirepository.org/nis/dataviewer?packageid=edi.269.2&entityid=d4c76f209a0653aa86bab1ff93ab9853", file.path(tempdir(), "FRP_zoops.csv"), mode="wb")
 
-FRP_zoop<-read_csv(file.path(tempdir(), "FRP_zoops.csv"),
-                   col_types=cols_only(Date="c", Time="c", StationCode="c"))
+#FRP_zoop<-read_csv(file.path(tempdir(), "FRP_zoops.csv"),
+#                   col_types=cols_only(Date="c", Time="c", StationCode="c"))
 
-FRP_bugs<-read_csv(file.path(tempdir(), "FRP_bugs.csv"))
+#FRP_bugs<-read_csv(file.path(tempdir(), "FRP_bugs.csv"))
 ##Use st_nearest_feature, not st_join to assign FRP stations
 
 ## All zoops ---------------------------------------------------------------
@@ -145,6 +145,36 @@ YBFMP_fish<-read_csv(file.path(tempdir(), "YBFMP_Fish.csv"),
 YBFMP_WQ<-bind_rows(YBFMP_fish, YBFMP_zoop)%>%
   group_by(Station, Year, Source, Station2)%>%
   summarise(N=sum(N), Latitude=unique(Latitude), Longitude=unique(Longitude), .groups="drop")
+
+
+# Smelt Larval Survey -----------------------------------------------------
+
+download.file("https://portal.edirepository.org/nis/dataviewer?packageid=edi.534.2&entityid=a365f36987dbfeb4cb9150946b7867c0", file.path(tempdir(), "SLS_Fish.csv"), mode="wb")
+download.file("https://portal.edirepository.org/nis/dataviewer?packageid=edi.534.2&entityid=a96f60dbaa275193abfa5b9cdadd7aa3", file.path(tempdir(), "SLS_stations.csv"), mode="wb")
+
+SLS_stations<-read_csv(file.path(tempdir(), "SLS_stations.csv"),
+                       col_types=cols_only(Station="c", Lat="c", Long="c"))%>%
+  separate(Lat, into=c("Lat_deg", "Lat_min", "Lat_sec"), sep=" ", convert=T)%>%
+  separate(Long, into=c("Long_deg", "Long_min", "Long_sec"), sep=" ", convert=T)%>%
+  mutate(Latitude=Lat_deg+Lat_min/60+Lat_sec/3600,
+         Longitude=(Long_deg+Long_min/60+Long_sec/3600)*(-1))%>%
+  bind_rows(tibble(Station="912", Latitude=37.966, Longitude=-121.367))%>% # Station 912 currently missing from stations
+  select(Station, Latitude, Longitude)
+
+SLS<-read_csv(file.path(tempdir(), "SLS_Fish.csv"),
+              col_types=cols_only(Date="c", Time="c", Station="c"))%>%
+  mutate(Date=parse_date_time(Date, "%Y-%m-%d", tz="America/Los_Angeles"),
+         Datetime=parse_date_time(if_else(is.na(Time), NA_character_, paste(Date, Time)), "%Y-%m-%d %H:%M:%S", tz="America/Los_Angeles"),
+         Source="SLS",
+         Year=year(Date))%>%
+  select(-Time)%>%
+  distinct(Station, Date, Datetime, .keep_all = TRUE)%>%
+  group_by(Station, Year, Source)%>%
+  summarise(N=n(), .groups="drop")%>%
+  left_join(SLS_stations, by="Station")%>%
+  filter(!is.na(Latitude) & !is.na(Longitude))%>%
+  mutate(Station2=Station)
+
 ## Integrated water quality ------------------------------------------------
 
 WQ<-wq(End_year = 2021,
@@ -161,7 +191,7 @@ WQ<-wq(End_year = 2021,
   mutate(Station2=if_else(n_Lat>1 | n_Lon>1, paste(Station2, Datetime), Station2))%>%
   group_by(Year, Station, Station2, Source)%>%
   summarise(Latitude=unique(Latitude), Longitude=unique(Longitude), N=n(), .groups="drop")%>%
-  bind_rows(EDSM, DJFMP, YBFMP_WQ)%>%
+  bind_rows(EDSM, DJFMP, YBFMP_WQ, SLS)%>%
   mutate(Parameter="Water_quality")
 
 
@@ -170,7 +200,7 @@ WQ<-wq(End_year = 2021,
 
 Fish<-WQ%>%
   filter(Source%in%c("STN", "FMWT", "EDSM", "DJFMP", "SKT", "20mm", "Suisun",
-                     "Baystudy"))%>%
+                     "Baystudy", "SLS"))%>%
   bind_rows(YBFMP_fish)%>%
   mutate(Parameter="Fish")
 
@@ -249,13 +279,13 @@ zoop_stations_match<-zoop_stations%>%
             by=c("WQ_station"="Station"))
 
 
-ggplot(data=filter(zoop_stations_match, Distance<=1000))+
-  #geom_sf(data=deltamapr::WW_Delta%>%st_transform(crs=4326))+
-  geom_point(aes(y=Latitude, x=Longitude, color=Distance), shape=16)+
-  geom_point(aes(y=WQ_lat, x=WQ_lon, color=Distance), shape=17)+
-  geom_segment(aes(y=Latitude, x=Longitude, yend=WQ_lat, xend=WQ_lon))+
-  scale_color_viridis_c()+
-  theme_bw()
+#ggplot(data=filter(zoop_stations_match, Distance<=1000))+
+#  #geom_sf(data=deltamapr::WW_Delta%>%st_transform(crs=4326))+
+#  geom_point(aes(y=Latitude, x=Longitude, color=Distance), shape=16)+
+#  geom_point(aes(y=WQ_lat, x=WQ_lon, color=Distance), shape=17)+
+#  geom_segment(aes(y=Latitude, x=Longitude, yend=WQ_lat, xend=WQ_lon))+
+#  scale_color_viridis_c()+
+#  theme_bw()
 
 zoop_stations_match_final<-zoop_stations_match%>%
   filter(Distance<=1000)%>%
@@ -293,29 +323,29 @@ BenZoop_stations<-full_join(zoop_stations_final, Benthic_stations,
 # Merge everything --------------------------------------------------------
 
 Stations<-bind_rows(Benthic, Phytoplankton, Zoop_final, WQ, Fish)%>%
-  mutate(Source=recode(Source, twentymm="20mm"),
+  mutate(Source=recode(Source, twentymm="20mm", USGS="SFBS", USBR="SDSCS"),
          Station=recode(Station, NZEZ2="EZ2", NZEZ6="EZ6", NZEZ2SJR="EZ2-SJR", NZEZ6SJR="EZ6-SJR"),
          StationID=paste(Source, Station2))
 
-Multiples<-Stations%>%
-  group_by(StationID)%>%
-  summarise(N_Lat=n_distinct(Latitude), N_Lon=n_distinct(Longitude), .groups="drop")%>%
-  filter(N_Lat>1 | N_Lon>1)%>%
-  distinct(StationID)
-
-Multiples2<-Stations%>%
-  filter(StationID%in%Multiples$StationID)%>%
-  distinct(StationID, Latitude, Longitude)%>%
-  group_by(StationID)%>%
-  mutate(ID=1:2)%>%
-  ungroup()%>%
-  pivot_wider(names_from = c(ID), values_from=c(Latitude, Longitude))
-
-ggplot()+
-  geom_sf(data=deltamapr::WW_Delta%>%st_transform(crs=4326))+
-  geom_point(data=Multiples2, aes(x=Longitude_1, y=Latitude_1), color="blue")+
-  geom_point(data=Multiples2, aes(x=Longitude_2, y=Latitude_2), color="red")+
-  geom_segment(data=Multiples2, aes(x=Longitude_2, y=Latitude_2, xend=Longitude_1, yend=Latitude_1), color="green", size=2)
+# Multiples<-Stations%>%
+#   group_by(StationID)%>%
+#   summarise(N_Lat=n_distinct(Latitude), N_Lon=n_distinct(Longitude), .groups="drop")%>%
+#   filter(N_Lat>1 | N_Lon>1)%>%
+#   distinct(StationID)
+# 
+# Multiples2<-Stations%>%
+#   filter(StationID%in%Multiples$StationID)%>%
+#   distinct(StationID, Latitude, Longitude)%>%
+#   group_by(StationID)%>%
+#   mutate(ID=1:2)%>%
+#   ungroup()%>%
+#   pivot_wider(names_from = c(ID), values_from=c(Latitude, Longitude))
+# 
+# ggplot()+
+#   geom_sf(data=deltamapr::WW_Delta%>%st_transform(crs=4326))+
+#   geom_point(data=Multiples2, aes(x=Longitude_1, y=Latitude_1), color="blue")+
+#   geom_point(data=Multiples2, aes(x=Longitude_2, y=Latitude_2), color="red")+
+#   geom_segment(data=Multiples2, aes(x=Longitude_2, y=Latitude_2, xend=Longitude_1, yend=Latitude_1), color="green", size=2)
   
 Stations_final<-Stations%>%
   group_by(StationID)%>%
