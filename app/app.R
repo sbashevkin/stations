@@ -1,7 +1,6 @@
 
 library(shiny)
 library(dplyr)
-library(sf)
 library(leaflet)
 require(shinyWidgets)
 require(rlang)
