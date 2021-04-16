@@ -9,6 +9,8 @@ require(RColorBrewer)
 require(readxl)
 require(DT)
 
+# Load initial data
+
 Sampling<-readRDS("Sampling.Rds")
 Survey_names<-tibble(Survey=c('20-mm Survey (20mm)', 'CDFW Bay Study (Baystudy)', 'Delta Juvenile Fish Monitoring Program (DJFMP)', 'Enhanced Delta Smelt Monitoring (EDSM)', 
                               'Environmental Monitoring Program (EMP)', 'Fall Midwater Trawl (FMWT)', 'Fish Restoration Program (FRP)', 'Spring Kodiak Trawl (SKT)', 'Smelt Larva Survey',
@@ -40,7 +42,13 @@ Survey_info<-read_excel("Survey_info.xlsx")%>%
 
 # Define UI for application that draws a histogram
 ui <- navbarPage("Bay-Delta monitoring", id="nav",
+                 
+                 # First tab for general info
+                 
                  tabPanel("Info", 
+                          
+                          # Write introductory text
+                          
                           a(shiny::icon("reply"), "Delta Science shinyapps homepage", href="https://deltascience.shinyapps.io/Home/"),
                           tags$div(tags$h2("Information"), 
                                    tags$p(tags$em("Click on the 'Interactive map' tab at the top to view the map of sampling locations.")),
@@ -51,18 +59,26 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                                    tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs."), 
                                    tags$p("Sampling effort is based off the latest available data, so some surveys may be missing in recent years for which data have not been released, or for collected data not included in data releases. 
                                           All surveys should be available for 2018 and earlier. 
-                                          Sampling locations are approximate and may represent the mean location when multiple locations were available for a station.")),
+                                          Sampling locations are approximate and may represent the mean location when multiple locations were available for a station."),
+                                   tags$p("The Fish Restoration Program is currently only represented by their zooplankton sampling."),
+                                   a(shiny::icon("github"), "App code is available here", href="https://github.com/sbashevkin/stations")),
                           tags$h3("Survey details"),
+                          
+                          # Include table of info
+                          
                           dataTableOutput("Survey_info")
                  ),
                  
+                 # Second tab for map
+                 
                  tabPanel("Interactive map", value="map",
                           
-                          
-                          # If not using custom CSS, set height of leafletOutput to a number instead of percent
+                          # Output map
+                    
                           leafletOutput("mapplot", width="100%", height="100vh"),
                           
-                          # Shiny versions prior to 0.11 should use class = "modal" instead.
+                          # Include panel with user inputs
+
                           absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
                                         draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
                                         width = 330, height = "auto",
@@ -89,6 +105,9 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                           )
                           
                  ),
+                 
+                 # Add custom css to control appearance
+                 
                  tags$style(HTML("
 
 .selected {background-color:white !important;}
@@ -102,10 +121,13 @@ td:first-child {
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
   
+  # Survey info table
   output$Survey_info<-renderDataTable({
     datatable(Survey_info, rownames=F, escape = FALSE, options=list(paging=FALSE))%>%
       formatRound(c('Average number of samples per year per station'), digits=0, interval = 3, mark = ',')
   })
+  
+  # Update the survey input with just the surveys that sample the user-selected parameters
   
   observeEvent(input$Parameters, {
     req(input$nav=="map")
@@ -129,6 +151,8 @@ server <- function(input, output, session) {
     
     updatePickerInput(session, "Surveys", choices=Surveys, selected=input$Surveys, choicesOpt = list(content = Surveys2))
   })
+  
+  # Update the choice of sample effort legend depending on the parameters present in the selected dataset
   
   output$Parameter_legend<-renderUI({
     req(input$nav=="map")
@@ -162,6 +186,8 @@ server <- function(input, output, session) {
                       selected = if_else(is.null(input$Parameter_legend), "Max", input$Parameter_legend), status = "primary")
   })
   
+  # Create an initial dataset of either 1) sampling effort for each year or 2) sampling effort summed across years, depending on user selection to the "Years" switch
+  
   Data<-reactive({
     req(input$nav=="map", input$Surveys, input$Parameters)
     
@@ -185,6 +211,8 @@ server <- function(input, output, session) {
     
     return(out)
   })
+  
+  # Create the dataset used for plotting, including all the info for the clickable popup and filtered to the chosen year if users are choosing years
   
   Data_plot<-reactive({
     req(Data())
@@ -227,6 +255,8 @@ server <- function(input, output, session) {
     }
   })
   
+  # Create the color palette for monitoring surveys
+  
   pal_survey<-reactive({
     req(input$nav=="map", Data())
     
@@ -240,6 +270,8 @@ server <- function(input, output, session) {
     
   })
   
+  # Create the color palette for sampling effort
+  
   pal_effort<-reactive({
     req(input$nav=="map", input$Parameter_legend)
     if(input$Log){
@@ -248,6 +280,8 @@ server <- function(input, output, session) {
       colorNumeric("viridis", Data()[[input$Parameter_legend]])
     }
   })
+  
+  # Create a reverse color palette (required to make the legend ordered logically)
   
   pal_effort_rev<-reactive({
     req(input$nav=="map", input$Parameter_legend)
@@ -258,6 +292,7 @@ server <- function(input, output, session) {
     }
   })
   
+  # Create the base map (these components don't change)
   
   mapplot<-reactive({
     req(input$nav=="map")
@@ -265,6 +300,8 @@ server <- function(input, output, session) {
       addProviderTiles("Esri.WorldGrayCanvas")%>%
       fitBounds(min(Sampling$Longitude, na.rm=T), min(Sampling$Latitude), max(Sampling$Longitude), max(Sampling$Latitude))
   })
+  
+  # Create the reactive components of the map that are responsive to user inputs
   
   observe({
     req(input$nav=="map", input$Legend)
@@ -298,6 +335,8 @@ server <- function(input, output, session) {
       }}
     
   })
+  
+  # Output the map
   
   output$mapplot <- renderLeaflet({
     mapplot()
