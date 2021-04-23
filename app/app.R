@@ -87,6 +87,10 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                                         pickerInput("Surveys", "Surveys", choices=Surveys, choicesOpt = list(content = Surveys2),
                                                     selected = Surveys, multiple = T, 
                                                     options=list(`actions-box`=TRUE, `selected-text-format` = "count > 3")),
+                                        prettySwitch("Effort_filter", "Filter by sampling effort?", status = "success", fill = TRUE, bigger=TRUE),
+                                        conditionalPanel(condition="input.Effort_filter",
+                                                         uiOutput("Effort_filter_parameter"),
+                                                         uiOutput("Effort_filter_range")),
                                         prettySwitch("Exclude_unfixed", "Exclude unfixed EMP EZ stations?", status = "success", fill = TRUE, bigger=TRUE),
                                         prettySwitch("Years", "Inspect sampling effort for each year?", status = "success", fill = TRUE, bigger=TRUE),
                                         conditionalPanel(condition="input.Years",
@@ -111,6 +115,7 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                  tags$style(HTML("
 
 .selected {background-color:white !important;}
+.selected {color:black !important;}
 .dropdown-menu.inner {background-color:#D6D6D6 !important;}
 td:first-child {
   font-weight: 900;
@@ -154,7 +159,7 @@ server <- function(input, output, session) {
   
   # Update the choice of sample effort legend depending on the parameters present in the selected dataset
   
-  output$Parameter_legend<-renderUI({
+  parameter_choices<-reactive({
     req(input$nav=="map")
     
     if(nrow(Data())<1){
@@ -179,11 +184,34 @@ server <- function(input, output, session) {
     Parameters2<-c(Parameters, "Max", "N_years")
     
     names(Parameters2)<-c(str_replace(Parameters, "_", " "), "Max N over all parameters", "Number of years")
+    return(Parameters2)
+  })
+  
+  output$Parameter_legend<-renderUI({
+    req(input$nav=="map", parameter_choices())
+    choices<-parameter_choices()
     
     
-    
-    radioGroupButtons("Parameter_legend", "Which parameter should be used for the sampling effort legend?", choices=Parameters2, 
+    radioGroupButtons("Parameter_legend", "Which parameter should be used for the sampling effort legend?", choices=choices, 
                       selected = if_else(is.null(input$Parameter_legend), "Max", input$Parameter_legend), status = "primary")
+  })
+  
+  output$Effort_filter_parameter<-renderUI({
+    req(input$nav=="map", parameter_choices())
+    choices<-parameter_choices()
+    
+    
+    pickerInput("Effort_filter_parameter", "Which metric of sampling effort would you like to filter by?", choices=choices, 
+                multiple = F, options=pickerOptions(actionsBox=TRUE, showTick=TRUE))
+  })
+  
+  output$Effort_filter_range<-renderUI({
+    req(input$nav=="map", input$Effort_filter_parameter, Data())
+    min<-min(Data()[[input$Effort_filter_parameter]])
+    max<-max(Data()[[input$Effort_filter_parameter]])
+    
+    sliderInput("Effort_filter_range", "Select the range of the above-selected sampling effort metric to retain", min=min, max=max,
+                value=c(min, max))
   })
   
   # Create an initial dataset of either 1) sampling effort for each year or 2) sampling effort summed across years, depending on user selection to the "Years" switch
@@ -242,14 +270,21 @@ server <- function(input, output, session) {
                           "<tr><td>N_Years &nbsp</td><td>%s</td></tr>")
     }
     
+    if(input$Effort_filter){
+      req(input$Effort_filter_range)
+      data<-filter(Data(), .data[[input$Effort_filter_parameter]]>=min(input$Effort_filter_range) & .data[[input$Effort_filter_parameter]]<=max(input$Effort_filter_range))
+    }else{
+      data<-Data()
+    }
+    
     if(input$Years){
       req(input$nav=="map", input$Year)
-      Data()%>%
+      data%>%
         filter(Year==input$Year)%>%
         mutate(tooltip=sprintf(str_model, Year, Source, Station, if_else(is.na(Extra_stations), "None", Extra_stations), Benthic, Fish, Phytoplankton, Water_quality, Zooplankton, Max, N_years),
                tooltip=paste0( "<table  border='1'>", tooltip, "</table>" ))
     }else{
-      Data()%>%
+      data%>%
         mutate(tooltip=sprintf(str_model, Source, Station, if_else(is.na(Extra_stations), "None", Extra_stations), Benthic, Fish, Phytoplankton, Water_quality, Zooplankton, Max, N_years),
                tooltip=paste0( "<table  border='1'>", tooltip, "</table>" ))
     }
