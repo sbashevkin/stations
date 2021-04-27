@@ -74,11 +74,11 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                  tabPanel("Interactive map", value="map",
                           
                           # Output map
-                    
+                          
                           leafletOutput("mapplot", width="100%", height="100vh"),
                           
                           # Include panel with user inputs
-
+                          
                           absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
                                         draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
                                         width = 330, height = "auto",
@@ -90,7 +90,7 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                                         prettySwitch("Effort_filter", "Filter by sampling effort?", status = "success", fill = TRUE, bigger=TRUE),
                                         conditionalPanel(condition="input.Effort_filter",
                                                          uiOutput("Effort_filter_parameter"),
-                                                         uiOutput("Effort_filter_range")),
+                                                         uiOutput("Effort_filter_minmax")),
                                         prettySwitch("Exclude_unfixed", "Exclude unfixed EMP EZ stations?", status = "success", fill = TRUE, bigger=TRUE),
                                         prettySwitch("Years", "Inspect sampling effort for each year?", status = "success", fill = TRUE, bigger=TRUE),
                                         conditionalPanel(condition="input.Years",
@@ -120,7 +120,7 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
 td:first-child {
   font-weight: 900;
 }
-"))
+"))           
 )
 
 # Define server logic required to draw a histogram
@@ -201,17 +201,22 @@ server <- function(input, output, session) {
     choices<-parameter_choices()
     
     
-    pickerInput("Effort_filter_parameter", "Which metric of sampling effort would you like to filter by?", choices=choices, 
+    pickerInput("Effort_filter_parameter", "Which metric of sampling effort would you like to filter by?", 
+                selected = if_else(is.null(input$Effort_filter_parameter), "Max", input$Effort_filter_parameter), choices=choices, 
                 multiple = F, options=pickerOptions(actionsBox=TRUE, showTick=TRUE))
   })
   
-  output$Effort_filter_range<-renderUI({
+  output$Effort_filter_minmax<-renderUI({
     req(input$nav=="map", input$Effort_filter_parameter, Data())
+    
     min<-min(Data()[[input$Effort_filter_parameter]])
     max<-max(Data()[[input$Effort_filter_parameter]])
     
-    sliderInput("Effort_filter_range", "Select the range of the above-selected sampling effort metric to retain", min=min, max=max,
-                value=c(min, max))
+    list(tags$label("Select the range of the above-selected sampling effort metric to retain", class="control-label"),
+      tags$div(numericInput("Effort_filter_min", "Min", value=min, width="150px"), 
+             style = "display: inline-block;"),
+         tags$div(numericInput("Effort_filter_max", "Max", value=max, width="150px"), 
+                  style = "display: inline-block;"))
   })
   
   # Create an initial dataset of either 1) sampling effort for each year or 2) sampling effort summed across years, depending on user selection to the "Years" switch
@@ -271,8 +276,8 @@ server <- function(input, output, session) {
     }
     
     if(input$Effort_filter){
-      req(input$Effort_filter_range)
-      data<-filter(Data(), .data[[input$Effort_filter_parameter]]>=min(input$Effort_filter_range) & .data[[input$Effort_filter_parameter]]<=max(input$Effort_filter_range))
+      req(input$Effort_filter_min, input$Effort_filter_max)
+      data<-filter(Data(), .data[[input$Effort_filter_parameter]]>=input$Effort_filter_min & .data[[input$Effort_filter_parameter]]<=input$Effort_filter_max)
     }else{
       data<-Data()
     }
@@ -309,10 +314,18 @@ server <- function(input, output, session) {
   
   pal_effort<-reactive({
     req(input$nav=="map", input$Parameter_legend)
-    if(input$Log){
-      colorNumeric("viridis", log(Data()[[input$Parameter_legend]]+1))
+    
+    if(input$Effort_filter){
+      req(input$Effort_filter_min, input$Effort_filter_max)
+      data<-filter(Data(), .data[[input$Effort_filter_parameter]]>=input$Effort_filter_min & .data[[input$Effort_filter_parameter]]<=input$Effort_filter_max)
     }else{
-      colorNumeric("viridis", Data()[[input$Parameter_legend]])
+      data<-Data()
+    }
+      
+    if(input$Log){
+      colorNumeric("viridis", log(data[[input$Parameter_legend]]+1))
+    }else{
+      colorNumeric("viridis", data[[input$Parameter_legend]])
     }
   })
   
@@ -320,10 +333,18 @@ server <- function(input, output, session) {
   
   pal_effort_rev<-reactive({
     req(input$nav=="map", input$Parameter_legend)
-    if(input$Log){
-      colorNumeric("viridis", log(Data()[[input$Parameter_legend]]+1), reverse = TRUE)
+    
+    if(input$Effort_filter){
+      req(input$Effort_filter_min, input$Effort_filter_max)
+      data<-filter(Data(), .data[[input$Effort_filter_parameter]]>=input$Effort_filter_min & .data[[input$Effort_filter_parameter]]<=input$Effort_filter_max)
     }else{
-      colorNumeric("viridis", Data()[[input$Parameter_legend]], reverse = TRUE)
+      data<-Data()
+    }
+    
+    if(input$Log){
+      colorNumeric("viridis", log(data[[input$Parameter_legend]]+1), reverse = TRUE)
+    }else{
+      colorNumeric("viridis", data[[input$Parameter_legend]], reverse = TRUE)
     }
   })
   
