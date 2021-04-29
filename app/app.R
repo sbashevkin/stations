@@ -56,9 +56,9 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                                                  tags$a('(sam.bashevkin@deltacouncil.ca.gov)', 
                                                         href="mailto:sam.bashevkin@deltacouncil.ca.gov?subject=Monitoring%20Shiny%20App"), 
                                                  " at the Delta Science Program with any questions.")),
-                                   tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs."), 
+                                   tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs. It is primarily meant for data users interested in exploring the spatio-temporal data availability from long-term monitoring programs."), 
                                    tags$p("Sampling effort is based off the latest available data, so some surveys may be missing in recent years for which data have not been released, or for collected data not included in data releases. 
-                                          All surveys should be available for 2018 and earlier. 
+                                          All surveys should be available for 2018 and earlier. All data included in data releases are presented here, regardless of whether they conform to the present-day sampling design.
                                           Sampling locations are approximate and may represent the mean location when multiple locations were available for a station."),
                                    tags$p("The Fish Restoration Program is currently only represented by their zooplankton sampling."),
                                    a(shiny::icon("github"), "App code is available here", href="https://github.com/sbashevkin/stations")),
@@ -213,8 +213,8 @@ server <- function(input, output, session) {
     max<-max(Data()[[input$Effort_filter_parameter]])
     
     list(tags$label("Select the range of the above-selected sampling effort metric to retain", class="control-label"),
-      tags$div(numericInput("Effort_filter_min", "Min", value=min, width="150px"), 
-             style = "display: inline-block;"),
+         tags$div(numericInput("Effort_filter_min", "Min", value=min, width="150px"), 
+                  style = "display: inline-block;"),
          tags$div(numericInput("Effort_filter_max", "Max", value=max, width="150px"), 
                   style = "display: inline-block;"))
   })
@@ -321,7 +321,7 @@ server <- function(input, output, session) {
     }else{
       data<-Data()
     }
-      
+    
     if(input$Log){
       colorNumeric("viridis", log(data[[input$Parameter_legend]]+1))
     }else{
@@ -376,12 +376,16 @@ server <- function(input, output, session) {
                            fillColor = ~pal_effort()(log(data[[input$Parameter_legend]]+1)), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
             addLegend(., "topleft", pal = pal_effort_rev(), values = ~log(data[[input$Parameter_legend]]+1), opacity=1, 
                       labFormat=labelFormat(transform=function(x) sort(round(exp(x)-1), decreasing = TRUE)),
-                      title=paste0(str_replace(input$Parameter_legend, "_", " "), "\nsamples per year"))
+                      title=case_when(input$Parameter_legend%in%c("Benthic", "Phytoplankton", "Zooplankton", "Water_quality", "Fish", "Max") ~ paste0(str_replace(input$Parameter_legend, "_", " "), " effort</br>(samples per year)"),
+                                      TRUE ~ str_replace(input$Parameter_legend, "_", " "))
+            )
         }else{
           addCircleMarkers(., weight = 1, lng = ~Longitude, lat = ~Latitude, 
                            fillColor = ~pal_effort()(data[[input$Parameter_legend]]), color="black", fillOpacity = 0.7, popup=lapply(data$tooltip, htmltools::HTML))%>%
-            addLegend(., "topleft", pal = pal_effort_rev(), values = ~data[[input$Parameter_legend]], opacity=1, title=paste0(str_replace(input$Parameter_legend, "_", " "), "\nsamples per year"), 
-                      labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE)))
+            addLegend(., "topleft", pal = pal_effort_rev(), values = ~data[[input$Parameter_legend]], opacity=1, 
+                      labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE)), 
+                      title=case_when(input$Parameter_legend%in%c("Benthic", "Phytoplankton", "Zooplankton", "Water_quality", "Fish", "Max") ~ paste0(str_replace(input$Parameter_legend, "_", " "), " effort</br>(samples per year)"),
+                                      TRUE ~ str_replace(input$Parameter_legend, "_", " ")))
         }}
         
       }else{
