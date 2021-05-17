@@ -193,7 +193,7 @@ WQ<-wq(End_year = 2021,
   mutate(Station2=if_else(n_Lat>1 | n_Lon>1, paste(Station2, Datetime), Station2))%>%
   group_by(Year, Station, Station2, Source)%>%
   summarise(Latitude=unique(Latitude), Longitude=unique(Longitude), N=n(), .groups="drop")%>%
-  bind_rows(EDSM, DJFMP, YBFMP_WQ, SLS)%>%
+  bind_rows(EDSM, DJFMP, YBFMP_WQ, SLS)%>% # Add DJFMP seine data since they are not in the integrated WQ dataset
   mutate(Parameter="Water_quality")
 
 

@@ -8,6 +8,7 @@ require(stringr)
 require(RColorBrewer)
 require(readxl)
 require(DT)
+require(tidyr)
 
 # Load initial data
 
@@ -26,6 +27,20 @@ names(Parameters)<-str_replace(Parameters, "_", " ")
 Surveys<-set_names(Survey_names$Abbreviation, Survey_names$Survey)
 
 Surveys2 <- str_replace_all(str_wrap(names(Surveys), width = 32), "\\n", "<br>")
+
+Stations<-Sampling%>%
+  filter(!Station%in%c("EZ2", "EZ6", "EZ2-SJR", "EZ6-SJR") & !Source=="EDSM")%>%
+  select(Source, StationID, Zoop_station, Benthic_station)%>%
+  unnest(Benthic_station, keep_empty = TRUE)%>%
+  mutate(across(c(Zoop_station, Benthic_station), ~if_else(is.na(.x), NA_character_, paste(Source, .x))))%>%
+  distinct()%>%
+  mutate(Station=StationID)%>%
+  pivot_longer(cols=c(Zoop_station, Benthic_station, Station), values_to="Station")%>%
+  select(-name)%>%
+  filter(!is.na(Station))%>%
+  bind_rows(tibble(Station=c("Unfixed EDSM stations", c("EMP EZ2", "EMP EZ6", "EMP EZ2-SJR", "EMP EZ6-SJR")), 
+                   StationID=Station, 
+                   Source=c("EDSM", rep("EMP", 4))), .)
 
 Survey_info<-read_excel("Survey_info.xlsx")%>%
   left_join(Sampling%>%
@@ -87,6 +102,7 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                                         pickerInput("Surveys", "Surveys", choices=Surveys, choicesOpt = list(content = Surveys2),
                                                     selected = Surveys, multiple = T, 
                                                     options=list(`actions-box`=TRUE, `selected-text-format` = "count > 3")),
+                                        uiOutput("Stations"),
                                         prettySwitch("Effort_filter", "Filter by sampling effort?", status = "success", fill = TRUE, bigger=TRUE),
                                         conditionalPanel(condition="input.Effort_filter",
                                                          uiOutput("Effort_filter_parameter"),
@@ -157,6 +173,33 @@ server <- function(input, output, session) {
     updatePickerInput(session, "Surveys", choices=Surveys, selected=input$Surveys, choicesOpt = list(content = Surveys2))
   })
   
+  #Populate station selector with just stations from the chosen surveys
+  output$Stations<-renderUI({
+    req(input$nav=="map", input$Surveys)
+    
+    if(is.null(input$Surveys)){
+      Surveys<-unique(Stations$Source)
+    } else{
+      Surveys<-input$Surveys
+    }
+    
+    if(is.null(input$Exclude_unfixed)){
+      Exclude_unfixed<-FALSE
+    } else{
+      Exclude_unfixed<-input$Exclude_unfixed
+    }
+    
+    
+    if(Exclude_unfixed){
+    choices<-filter(Stations, Source%in%Surveys & !Station%in%c("EMP EZ2", "EMP EZ6", "EMP EZ2-SJR", "EMP EZ6-SJR"))$Station
+    }else{
+      choices<-filter(Stations, Source%in%Surveys)$Station
+    }
+    
+    pickerInput("Stations", "Select specific stations", choices=choices, 
+                selected = choices, multiple = T, options=pickerOptions(actionsBox=TRUE, selectedTextFormat = "count > 3", liveSearch = TRUE))
+  })
+  
   # Update the choice of sample effort legend depending on the parameters present in the selected dataset
   
   parameter_choices<-reactive({
@@ -222,7 +265,11 @@ server <- function(input, output, session) {
   # Create an initial dataset of either 1) sampling effort for each year or 2) sampling effort summed across years, depending on user selection to the "Years" switch
   
   Data<-reactive({
-    req(input$nav=="map", input$Surveys, input$Parameters)
+    req(input$nav=="map", input$Surveys, input$Parameters, input$Stations)
+    
+    Stations<-Stations%>%
+      filter(Station%in%input$Stations)%>%
+      pull(StationID)
     
     if(input$Exclude_unfixed){
       out<-filter(Sampling, !Station%in%c("EZ2", "EZ6", "EZ2-SJR", "EZ6-SJR"))
@@ -231,7 +278,18 @@ server <- function(input, output, session) {
     }
     
     out<-out%>%
-      filter(Source%in%input$Surveys & if_any(all_of(input$Parameters), ~.x>0))
+      filter(Source%in%input$Surveys & if_any(all_of(input$Parameters), ~.x>0))%>%
+      filter(StationID%in%Stations | Source=="EDSM" | Station%in%c("EZ2", "EZ6", "EZ2-SJR", "EZ6-SJR"))%>%
+      {if(!"Unfixed EDSM stations"%in%Stations){
+        filter(., Source!="EDSM")
+      }else{
+        .
+      }}%>%
+      {if(!all(c("EMP EZ2", "EMP EZ6", "EMP EZ2-SJR", "EMP EZ6-SJR")%in%Stations)){
+        filter(., !Station%in%str_remove(setdiff(c("EMP EZ2", "EMP EZ6", "EMP EZ2-SJR", "EMP EZ6-SJR"), Stations), "EMP "))
+      }else{
+        .
+      }}
     
     if(input$Years){
       out<-out
