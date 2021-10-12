@@ -58,31 +58,6 @@ Survey_info<-read_excel("Survey_info.xlsx")%>%
 # Define UI for application that draws a histogram
 ui <- navbarPage("Bay-Delta monitoring", id="nav",
                  
-                 # First tab for general info
-                 
-                 tabPanel("Info", 
-                          
-                          # Write introductory text
-                          
-                          a(shiny::icon("reply"), "Delta Science shinyapps homepage", href="https://deltascience.shinyapps.io/Home/"),
-                          tags$div(tags$h2("Information"), 
-                                   tags$p(tags$em("Click on the 'Interactive map' tab at the top to view the map of sampling locations.")),
-                                   tags$p(tags$b("Please contact Sam Bashevkin ", 
-                                                 tags$a('(sam.bashevkin@deltacouncil.ca.gov)', 
-                                                        href="mailto:sam.bashevkin@deltacouncil.ca.gov?subject=Monitoring%20Shiny%20App"), 
-                                                 " at the Delta Science Program with any questions.")),
-                                   tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs. It is primarily meant for data users interested in exploring the spatio-temporal data availability from long-term monitoring programs."), 
-                                   tags$p("Sampling effort is based off the latest available data, so some surveys may be missing in recent years for which data have not been released, or for collected data not included in data releases. 
-                                          All surveys should be available for 2018 and earlier. All data included in data releases are presented here, regardless of whether they conform to the present-day sampling design.
-                                          Sampling locations are approximate and may represent the mean location when multiple locations were available for a station."),
-                                   tags$p("The Fish Restoration Program is currently only represented by their zooplankton sampling."),
-                                   a(shiny::icon("github"), "App code is available here", href="https://github.com/sbashevkin/stations")),
-                          tags$h3("Survey details"),
-                          
-                          # Include table of info
-                          
-                          dataTableOutput("Survey_info")
-                 ),
                  
                  # Second tab for map
                  
@@ -124,6 +99,31 @@ ui <- navbarPage("Bay-Delta monitoring", id="nav",
                                                          prettySwitch("Log", "log(x+1) transform scale?", status = "success", fill = TRUE, bigger=TRUE))
                           )
                           
+                 ),
+                 # First tab for general info
+                 
+                 tabPanel("Info", 
+                          
+                          # Write introductory text
+                          
+                          a(shiny::icon("reply"), "Delta Science shinyapps homepage", href="https://deltascience.shinyapps.io/Home/"),
+                          tags$div(tags$h2("Information"), 
+                                   tags$p(tags$em("Click on the 'Interactive map' tab at the top to view the map of sampling locations.")),
+                                   tags$p(tags$b("Please contact Sam Bashevkin ", 
+                                                 tags$a('(sam.bashevkin@deltacouncil.ca.gov)', 
+                                                        href="mailto:sam.bashevkin@deltacouncil.ca.gov?subject=Monitoring%20Shiny%20App"), 
+                                                 " at the Delta Science Program with any questions.")),
+                                   tags$p("This app displays the sampling effort and spatio-temporal coverage of 13 Bay-Delta monitoring programs. It is primarily meant for data users interested in exploring the spatio-temporal data availability from long-term monitoring programs."), 
+                                   tags$p("Sampling effort is based off the latest available data, so some surveys may be missing in recent years for which data have not been released, or for collected data not included in data releases. 
+                                          All surveys should be available for 2018 and earlier. All data included in data releases are presented here, regardless of whether they conform to the present-day sampling design.
+                                          Sampling locations are approximate and may represent the mean location when multiple locations were available for a station."),
+                                   tags$p("The Fish Restoration Program is currently only represented by their zooplankton sampling."),
+                                   a(shiny::icon("github"), "App code is available here", href="https://github.com/sbashevkin/stations")),
+                          tags$h3("Survey details"),
+                          
+                          # Include table of info
+                          
+                          dataTableOutput("Survey_info")
                  ),
                  
                  # Add custom css to control appearance
